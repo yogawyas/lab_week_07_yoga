@@ -17,6 +17,7 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.example.lab_week_07_yoga.databinding.ActivityMapsBinding
 
@@ -25,8 +26,9 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityMapsBinding
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    private var currentMarker: Marker? = null
 
-    // ✅ Fused Location Provider (ambil lokasi pengguna)
+    // Fused Location Provider (lokasi pengguna)
     private val fusedLocationProviderClient by lazy {
         LocationServices.getFusedLocationProviderClient(this)
     }
@@ -40,15 +42,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             .findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
 
-        // ✅ Register permission launcher
+        // Register permission launcher
         requestPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-                if (isGranted) {
-                    getLastLocation()
-                } else {
-                    showPermissionRationale {
-                        requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                    }
+                if (isGranted) getLastLocation()
+                else showPermissionRationale {
+                    requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                 }
             }
     }
@@ -56,6 +55,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
+        // Jika sudah punya izin lokasi → tampilkan posisi user
         when {
             hasLocationPermission() -> getLastLocation()
             shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) -> {
@@ -64,6 +64,16 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 }
             }
             else -> requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        // 🌍 Tambahkan marker default di kampus atau lokasi tetap
+        val kampus = LatLng(-6.364953, 106.828533)
+        mMap.addMarker(MarkerOptions().position(kampus).title("Politeknik Negeri Jakarta"))
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(kampus, 15f))
+
+        // 🖱️ Event: klik di map → tambahkan marker baru
+        mMap.setOnMapClickListener { latLng ->
+            addCustomMarker(latLng)
         }
     }
 
@@ -74,43 +84,39 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun showPermissionRationale(positiveAction: () -> Unit) {
         AlertDialog.Builder(this)
-            .setTitle("Location permission")
-            .setMessage("This app will not work without knowing your current location.")
-            .setPositiveButton(android.R.string.ok) { _, _ -> positiveAction() }
-            .setNegativeButton(android.R.string.cancel) { dialog, _ -> dialog.dismiss() }
+            .setTitle("Izin Lokasi Diperlukan")
+            .setMessage("Aplikasi membutuhkan akses lokasi agar dapat menampilkan posisi Anda.")
+            .setPositiveButton("OK") { _, _ -> positiveAction() }
+            .setNegativeButton("Batal") { dialog, _ -> dialog.dismiss() }
             .create().show()
     }
 
-    // ✅ Ambil lokasi terakhir pengguna & tampilkan marker
     @SuppressLint("MissingPermission")
     private fun getLastLocation() {
         if (hasLocationPermission()) {
-            try {
-                fusedLocationProviderClient.lastLocation
-                    .addOnSuccessListener { location: Location? ->
-                        location?.let {
-                            val userLatLng = LatLng(it.latitude, it.longitude)
-                            updateMapLocation(userLatLng)
-                            addMarkerAtLocation(userLatLng, "You are here")
-                        } ?: run {
-                            Log.w("MapsActivity", "Location is null, can't update map")
-                        }
-                    }
-            } catch (e: SecurityException) {
-                Log.e("MapsActivity", "SecurityException: ${e.message}")
-            }
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            fusedLocationProviderClient.lastLocation
+                .addOnSuccessListener { location: Location? ->
+                    location?.let {
+                        val userLatLng = LatLng(it.latitude, it.longitude)
+                        updateMapLocation(userLatLng)
+                        addCustomMarker(userLatLng, "You are here")
+                    } ?: Log.w("MapsActivity", "Location is null")
+                }
         }
     }
 
-    // ✅ Fungsi bantu pindahkan kamera ke lokasi pengguna
     private fun updateMapLocation(location: LatLng) {
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(location, 15f))
+        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(location, 16f))
     }
 
-    // ✅ Tambahkan marker di lokasi pengguna
-    private fun addMarkerAtLocation(location: LatLng, title: String) {
-        mMap.addMarker(MarkerOptions().position(location).title(title))
+    // 📍 Tambahkan marker baru di lokasi yang diklik
+    private fun addCustomMarker(location: LatLng, title: String = "Custom Marker") {
+        currentMarker?.remove() // hapus marker lama jika ada
+        currentMarker = mMap.addMarker(
+            MarkerOptions()
+                .position(location)
+                .title(title)
+        )
+        updateMapLocation(location)
     }
 }
