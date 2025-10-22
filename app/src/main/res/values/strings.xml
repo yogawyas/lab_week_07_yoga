@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">lab_week_07_yoga</string>
+    <string name="title_activity_maps">Maps</string>
 </resources>
